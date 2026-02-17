@@ -10,6 +10,7 @@ function mockWsServer() {
     onStatusUpdate(cb) {
       statusCallbacks.push(cb);
     },
+    onSenderMessage: vi.fn(),
     cleanup: vi.fn(),
   };
   return { server, statusCallbacks };

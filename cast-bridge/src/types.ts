@@ -11,7 +11,9 @@ export type DisplayCommand =
   | { type: 'pause' }
   | { type: 'seek'; currentTime: number }
   | { type: 'stop' }
-  | { type: 'volume'; level: number };
+  | { type: 'volume'; level: number }
+  | { type: 'webrtc-offer'; sessionId: string; sdp: string }
+  | { type: 'ice-candidate'; sessionId: string; candidate: RTCIceCandidateInit };
 
 export interface MediaCommand {
   type: 'load' | 'play' | 'pause' | 'seek' | 'stop' | 'volume';

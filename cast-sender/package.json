@@ -1,0 +1,22 @@
+{
+  "name": "cast-sender",
+  "version": "1.0.0",
+  "type": "module",
+  "bin": {
+    "cast-sender": "./dist/cli.js"
+  },
+  "scripts": {
+    "start": "tsx src/cli.ts",
+    "build": "tsc"
+  },
+  "dependencies": {
+    "werift": "^0.20.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "@types/ws": "^8.5.0",
+    "tsx": "^4.19.0",
+    "typescript": "^5.7.0"
+  }
+}

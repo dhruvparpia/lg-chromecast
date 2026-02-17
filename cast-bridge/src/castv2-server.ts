@@ -10,6 +10,15 @@ const DEBUG = process.env.DEBUG === '1' || process.env.DEBUG === 'true';
 interface StartOptions {
   onMediaCommand: (cmd: MediaCommand) => void;
   deviceName?: string;
+  port?: number;
+  onWebrtcOffer?: (
+    sessionId: string,
+    sdp: string,
+    sendAnswer: (sdp: string) => void,
+    sendCandidate: (candidate: object) => void,
+  ) => void;
+  onIceCandidate?: (sessionId: string, candidate: object) => void;
+  onMirroringStop?: (sessionId: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -42,6 +51,7 @@ function generateSelfSignedCert(): { key: string; cert: string } {
 // ---------------------------------------------------------------------------
 
 function derLength(len: number): Buffer {
+  if (len > 0xFFFF) throw new Error('DER length > 65535 not supported');
   if (len < 0x80) return Buffer.from([len]);
   if (len < 0x100) return Buffer.from([0x81, len]);
   return Buffer.from([0x82, (len >> 8) & 0xff, len & 0xff]);
@@ -157,6 +167,8 @@ const NS_CONNECTION = 'urn:x-cast:com.google.cast.tp.connection';
 const NS_HEARTBEAT = 'urn:x-cast:com.google.cast.tp.heartbeat';
 const NS_RECEIVER = 'urn:x-cast:com.google.cast.receiver';
 const NS_MEDIA = 'urn:x-cast:com.google.cast.media';
+const NS_WEBRTC = 'urn:x-cast:com.google.cast.webrtc';
+const NS_REMOTING = 'urn:x-cast:com.google.cast.remoting';
 
 // ---------------------------------------------------------------------------
 // Default receiver status (mimics a Chromecast with Default Media Receiver)
@@ -172,6 +184,8 @@ function makeReceiverStatus(sessionId: string, transportId: string) {
         displayName: 'Default Media Receiver',
         namespaces: [
           { name: NS_MEDIA },
+          { name: NS_WEBRTC },
+          { name: NS_REMOTING },
           { name: 'urn:x-cast:com.google.cast.debugoverlay' },
         ],
         sessionId,
@@ -293,12 +307,12 @@ function buildConnectedBuffer(sourceId: string, destinationId: string, requestId
 
 function handleConnection(
   socket: TLSSocket,
-  onMediaCommand: (cmd: MediaCommand) => void,
+  options: StartOptions,
 ): void {
+  const { onMediaCommand, onWebrtcOffer, onIceCandidate, onMirroringStop } = options;
   const sessionId = randomUUID();
   const transportId = `transport-${sessionId.slice(0, 8)}`;
   const mediaState = makeDefaultMediaState();
-
   // Smarter receive buffer: track offset instead of slicing on every message
   let recvBuf = Buffer.alloc(0);
   let recvOffset = 0;
@@ -323,6 +337,11 @@ function handleConnection(
 
     while (recvBuf.length - recvOffset >= 4) {
       const msgLen = recvBuf.readUInt32BE(recvOffset);
+      const MAX_MSG_LEN = 1024 * 1024; // 1 MB
+      if (msgLen > MAX_MSG_LEN) {
+        socket.destroy();
+        return;
+      }
       if (recvBuf.length - recvOffset < 4 + msgLen) break;
 
       const msgBytes = recvBuf.subarray(recvOffset + 4, recvOffset + 4 + msgLen);
@@ -488,6 +507,69 @@ function handleConnection(
           break;
         }
 
+        // -- WebRTC signaling --
+        case NS_WEBRTC: {
+          const msgType = (payload.type as string) ?? '';
+          if (msgType === 'OFFER') {
+            const seqNum = (payload.seqNum as number) ?? 0;
+            const offerObj = payload.offer as Record<string, unknown> | undefined;
+            const sdp = (offerObj?.sdp as string) ?? '';
+            if (DEBUG) console.log(`[castv2] WebRTC OFFER seqNum=${seqNum} sessionId=${sessionId}`);
+
+            const sendAnswer = (answerSdp: string): void => {
+              sendJsonMessage(socket, dst, src, NS_WEBRTC, {
+                type: 'ANSWER',
+                seqNum,
+                answer: { sdp: answerSdp },
+              });
+            };
+
+            const sendCandidate = (candidate: object): void => {
+              sendJsonMessage(socket, dst, src, NS_WEBRTC, {
+                type: 'ICE_CANDIDATE',
+                seqNum,
+                candidate,
+              });
+            };
+
+            if (onWebrtcOffer) {
+              onWebrtcOffer(sessionId, sdp, sendAnswer, sendCandidate);
+            }
+          } else if (msgType === 'ICE_CANDIDATE') {
+            const candidate = payload.candidate as object | undefined;
+            if (DEBUG) console.log(`[castv2] WebRTC ICE_CANDIDATE sessionId=${sessionId}`);
+            if (onIceCandidate && candidate) {
+              onIceCandidate(sessionId, candidate);
+            }
+          }
+          break;
+        }
+
+        // -- Remoting control --
+        case NS_REMOTING: {
+          const msgType = (payload.type as string) ?? '';
+          if (msgType === 'SETUP') {
+            if (DEBUG) console.log(`[castv2] Remoting SETUP sessionId=${sessionId}`);
+            sendJsonMessage(socket, dst, src, NS_REMOTING, {
+              type: 'SETUP_OK',
+            });
+          } else if (msgType === 'START') {
+            if (DEBUG) console.log(`[castv2] Remoting START sessionId=${sessionId}`);
+            sendJsonMessage(socket, dst, src, NS_REMOTING, {
+              type: 'START_OK',
+            });
+          } else if (msgType === 'STOP') {
+            if (DEBUG) console.log(`[castv2] Remoting STOP sessionId=${sessionId}`);
+            sendJsonMessage(socket, dst, src, NS_REMOTING, {
+              type: 'STOP_OK',
+            });
+            if (onMirroringStop) {
+              onMirroringStop(sessionId);
+            }
+          }
+          break;
+        }
+
         default:
           break;
       }
@@ -517,13 +599,13 @@ export async function startCastV2Server(
       rejectUnauthorized: false,
     },
     (socket) => {
-      handleConnection(socket, options.onMediaCommand);
+      handleConnection(socket, options);
     },
   );
 
   return new Promise((resolve, reject) => {
     server.on('error', reject);
-    server.listen(8009, () => {
+    server.listen(options.port ?? 8009, () => {
       const addr = server.address();
       const port = typeof addr === 'object' && addr ? addr.port : 8009;
       console.log(`CastV2 TLS server listening on port ${port}`);

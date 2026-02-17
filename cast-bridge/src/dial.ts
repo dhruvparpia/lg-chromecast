@@ -2,14 +2,17 @@ import { createServer, type Server, type IncomingMessage, type ServerResponse } 
 import { randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
 
-let FRIENDLY_NAME = 'Cast Bridge';
 const MODEL_NAME = 'Chromecast Ultra';
 const MANUFACTURER = 'Google Inc.';
 const DEVICE_UUID = randomUUID();
 
 const DIAL_PORT = 8008;
 
-function deviceDescXml(req: IncomingMessage): string {
+function escapeXml(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&apos;');
+}
+
+function deviceDescXml(req: IncomingMessage, friendlyName: string): string {
   const host = req.headers.host ?? `${hostname()}:${DIAL_PORT}`;
   return `<?xml version="1.0" encoding="utf-8"?>
 <root xmlns="urn:schemas-upnp-org:device-1-0">
@@ -17,10 +20,10 @@ function deviceDescXml(req: IncomingMessage): string {
     <major>1</major>
     <minor>0</minor>
   </specVersion>
-  <URLBase>http://${host}</URLBase>
+  <URLBase>http://${escapeXml(host)}</URLBase>
   <device>
     <deviceType>urn:dial-multiscreen-org:device:dial:1</deviceType>
-    <friendlyName>${FRIENDLY_NAME}</friendlyName>
+    <friendlyName>${escapeXml(friendlyName)}</friendlyName>
     <manufacturer>${MANUFACTURER}</manufacturer>
     <modelName>${MODEL_NAME}</modelName>
     <UDN>uuid:${DEVICE_UUID}</UDN>
@@ -56,7 +59,7 @@ function chromecastAppXml(req: IncomingMessage): string {
   <activity-status>
     <description>ChromeCast</description>
   </activity-status>
-  <link rel="run" href="http://${host}/apps/ChromeCast/run"/>
+  <link rel="run" href="http://${escapeXml(host)}/apps/ChromeCast/run"/>
 </service>`;
 }
 
@@ -72,44 +75,43 @@ function setSsdpHeaders(res: ServerResponse, req: IncomingMessage): void {
   res.setHeader('Application-DIAL-Version', '2.2');
 }
 
-function handleRequest(req: IncomingMessage, res: ServerResponse): void {
-  const { method, url } = req;
-
-  setCorsHeaders(res);
-  setSsdpHeaders(res, req);
-
-  if (method === 'OPTIONS') {
-    res.writeHead(204);
-    res.end();
-    return;
-  }
-
-  if (method === 'GET' && url === '/ssdp/device-desc.xml') {
-    const xml = deviceDescXml(req);
-    res.writeHead(200, {
-      'Content-Type': 'application/xml; charset="utf-8"',
-      'Content-Length': Buffer.byteLength(xml),
-    });
-    res.end(xml);
-    return;
-  }
-
-  if (method === 'GET' && url === '/apps/ChromeCast') {
-    const xml = chromecastAppXml(req);
-    res.writeHead(200, {
-      'Content-Type': 'application/xml; charset="utf-8"',
-      'Content-Length': Buffer.byteLength(xml),
-    });
-    res.end(xml);
-    return;
-  }
-
-  res.writeHead(404, { 'Content-Type': 'text/plain' });
-  res.end('Not Found');
-}
-
 export function startDial(port: number = DIAL_PORT, friendlyName = 'Cast Bridge'): () => void {
-  FRIENDLY_NAME = friendlyName;
+  function handleRequest(req: IncomingMessage, res: ServerResponse): void {
+    const { method, url } = req;
+
+    setCorsHeaders(res);
+    setSsdpHeaders(res, req);
+
+    if (method === 'OPTIONS') {
+      res.writeHead(204);
+      res.end();
+      return;
+    }
+
+    if (method === 'GET' && url === '/ssdp/device-desc.xml') {
+      const xml = deviceDescXml(req, friendlyName);
+      res.writeHead(200, {
+        'Content-Type': 'application/xml; charset="utf-8"',
+        'Content-Length': Buffer.byteLength(xml),
+      });
+      res.end(xml);
+      return;
+    }
+
+    if (method === 'GET' && url === '/apps/ChromeCast') {
+      const xml = chromecastAppXml(req);
+      res.writeHead(200, {
+        'Content-Type': 'application/xml; charset="utf-8"',
+        'Content-Length': Buffer.byteLength(xml),
+      });
+      res.end(xml);
+      return;
+    }
+
+    res.writeHead(404, { 'Content-Type': 'text/plain' });
+    res.end('Not Found');
+  }
+
   const server: Server = createServer(handleRequest);
 
   server.listen(port, () => {

@@ -254,6 +254,149 @@ var MediaPlayer = (function () {
   };
 })();
 
+// ---- Mirror Player (WebRTC) ----
+
+var MirrorPlayer = (function () {
+  var peerConnection = null;
+  var currentSessionId = null;
+  var mirrorVideo = null;
+  var indicatorEl = null;
+
+  function _getMirrorVideo() {
+    if (!mirrorVideo) {
+      mirrorVideo = document.getElementById('mirror-player');
+    }
+    return mirrorVideo;
+  }
+
+  function _resetIndicator() {
+    if (!indicatorEl) {
+      indicatorEl = document.querySelector('.mirror-indicator');
+    }
+    if (indicatorEl) {
+      // Re-trigger the fade animation by removing and re-adding the element
+      var parent = indicatorEl.parentNode;
+      var clone = indicatorEl.cloneNode(true);
+      parent.replaceChild(clone, indicatorEl);
+      indicatorEl = clone;
+    }
+  }
+
+  function handleOffer(sessionId, sdp) {
+    console.log('[MirrorPlayer] Received offer for session:', sessionId);
+
+    // Clean up any existing connection
+    if (peerConnection) {
+      peerConnection.close();
+      peerConnection = null;
+    }
+
+    currentSessionId = sessionId;
+
+    var config = {
+      iceServers: [],
+      sdpSemantics: 'unified-plan'
+    };
+
+    peerConnection = new RTCPeerConnection(config);
+
+    peerConnection.ontrack = function (event) {
+      console.log('[MirrorPlayer] Remote track received:', event.track.kind);
+      var vid = _getMirrorVideo();
+      if (event.streams && event.streams[0]) {
+        vid.srcObject = event.streams[0];
+      } else {
+        // Fallback: create a MediaStream from the track
+        if (!vid.srcObject) {
+          vid.srcObject = new MediaStream();
+        }
+        vid.srcObject.addTrack(event.track);
+      }
+      _resetIndicator();
+      ScreenManager.show('mirror-screen');
+    };
+
+    peerConnection.onicecandidate = function (event) {
+      if (event.candidate) {
+        console.log('[MirrorPlayer] Sending ICE candidate');
+        BridgeConnection.send({
+          type: 'ice-candidate',
+          sessionId: currentSessionId,
+          candidate: event.candidate
+        });
+      }
+    };
+
+    peerConnection.onconnectionstatechange = function () {
+      console.log('[MirrorPlayer] Connection state:', peerConnection.connectionState);
+      var state = peerConnection.connectionState;
+      if (state === 'disconnected' || state === 'failed' || state === 'closed') {
+        stop();
+      }
+    };
+
+    var offer = new RTCSessionDescription({ type: 'offer', sdp: sdp });
+
+    peerConnection.setRemoteDescription(offer)
+      .then(function () {
+        return peerConnection.createAnswer();
+      })
+      .then(function (answer) {
+        return peerConnection.setLocalDescription(answer);
+      })
+      .then(function () {
+        console.log('[MirrorPlayer] Sending answer');
+        BridgeConnection.send({
+          type: 'webrtc-answer',
+          sessionId: currentSessionId,
+          sdp: peerConnection.localDescription.sdp
+        });
+      })
+      .catch(function (err) {
+        console.error('[MirrorPlayer] WebRTC negotiation failed:', err);
+        stop();
+      });
+  }
+
+  function handleIceCandidate(sessionId, candidate) {
+    if (!peerConnection || sessionId !== currentSessionId) {
+      console.warn('[MirrorPlayer] Ignoring ICE candidate for unknown session');
+      return;
+    }
+    console.log('[MirrorPlayer] Adding ICE candidate');
+    var iceCandidate = new RTCIceCandidate(candidate);
+    peerConnection.addIceCandidate(iceCandidate).catch(function (err) {
+      console.warn('[MirrorPlayer] Failed to add ICE candidate:', err);
+    });
+  }
+
+  function stop() {
+    console.log('[MirrorPlayer] Stopping');
+    if (peerConnection) {
+      peerConnection.close();
+      peerConnection = null;
+    }
+    currentSessionId = null;
+
+    var vid = _getMirrorVideo();
+    if (vid.srcObject) {
+      var tracks = vid.srcObject.getTracks();
+      for (var i = 0; i < tracks.length; i++) {
+        tracks[i].stop();
+      }
+      vid.srcObject = null;
+    }
+
+    ScreenManager.show('idle-screen');
+  }
+
+  return {
+    handleOffer: handleOffer,
+    handleIceCandidate: handleIceCandidate,
+    stop: stop
+  };
+})();
+
 // ---- WebSocket Bridge Connection ----
 
 var BridgeConnection = (function () {
@@ -353,6 +496,18 @@ var BridgeConnection = (function () {
         MediaPlayer.setVolume(msg.level);
         break;
 
+      case 'webrtc-offer':
+        MirrorPlayer.handleOffer(msg.sessionId, msg.sdp);
+        break;
+
+      case 'ice-candidate':
+        MirrorPlayer.handleIceCandidate(msg.sessionId, msg.candidate);
+        break;
+
+      case 'mirror-stop':
+        MirrorPlayer.stop();
+        break;
+
       default:
         console.warn('[Bridge] Unknown message type:', msg.type);
     }
@@ -378,7 +533,7 @@ var BridgeConnection = (function () {
     statusTimer = null;
   }
 
-  return { connect: connect };
+  return { connect: connect, send: _send };
 })();
 
 // ---- App Entry Point ----
