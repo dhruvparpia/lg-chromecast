@@ -1,5 +1,5 @@
 import { createServer, TLSSocket } from 'node:tls';
-import { generateKeyPairSync, createSign, randomUUID } from 'node:crypto';
+import { generateKeyPairSync, createSign, randomUUID, randomBytes } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { dirname, join } from 'node:path';
 import protobuf from 'protobufjs';
@@ -19,6 +19,7 @@ interface StartOptions {
   ) => void;
   onIceCandidate?: (sessionId: string, candidate: object) => void;
   onMirroringStop?: (sessionId: string) => void;
+  onSenderDisconnect?: (sessionId: string) => void;
 }
 
 // ---------------------------------------------------------------------------
@@ -88,8 +89,10 @@ function derToPem(der: Buffer, label: string): string {
 }
 
 function buildSelfSignedCert(pkDer: Buffer, pubDer: Buffer): Buffer {
-  // Serial number: INTEGER 1
-  const serial = Buffer.from([0x02, 0x01, 0x01]);
+  // Serial number: random 16-byte positive integer
+  const serialBytes = randomBytes(16);
+  serialBytes[0]! &= 0x7f; // ensure positive
+  const serial = derTag(0x02, serialBytes);
 
   // Signature algorithm: sha256WithRSAEncryption
   const sigAlgOid = Buffer.from([
@@ -309,15 +312,23 @@ function handleConnection(
   socket: TLSSocket,
   options: StartOptions,
 ): void {
-  const { onMediaCommand, onWebrtcOffer, onIceCandidate, onMirroringStop } = options;
+  const { onMediaCommand, onWebrtcOffer, onIceCandidate, onMirroringStop, onSenderDisconnect } = options;
   const sessionId = randomUUID();
   const transportId = `transport-${sessionId.slice(0, 8)}`;
   const mediaState = makeDefaultMediaState();
   // Smarter receive buffer: track offset instead of slicing on every message
+  const MAX_BUF_SIZE = 2 * 1024 * 1024; // 2 MB total buffer limit
   let recvBuf = Buffer.alloc(0);
   let recvOffset = 0;
 
   socket.on('data', (chunk: Buffer) => {
+    // Guard against unbounded buffer growth from slow/malicious senders
+    if (recvBuf.length - recvOffset + chunk.length > MAX_BUF_SIZE) {
+      if (DEBUG) console.log('[castv2] recv buffer exceeded max size, dropping connection');
+      socket.destroy();
+      return;
+    }
+
     // Append chunk to receive buffer
     if (recvOffset > 0 && recvOffset === recvBuf.length) {
       // Buffer fully consumed, reset
@@ -573,6 +584,12 @@ function handleConnection(
         default:
           break;
       }
+    }
+  });
+
+  socket.on('close', () => {
+    if (onSenderDisconnect) {
+      onSenderDisconnect(sessionId);
     }
   });
 

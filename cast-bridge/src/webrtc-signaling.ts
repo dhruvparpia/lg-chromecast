@@ -1,13 +1,19 @@
 import type { WsServer } from './ws-server.js';
+import type { IceCandidateInit } from './types.js';
 
 const DEBUG = process.env.DEBUG === '1' || process.env.DEBUG === 'true';
 const SESSION_TIMEOUT_MS = 60_000;
 
+interface SdpInit {
+  type: 'offer' | 'answer';
+  sdp: string;
+}
+
 export interface SignalingSession {
   sessionId: string;
-  offer?: RTCSessionDescriptionInit;
-  answer?: RTCSessionDescriptionInit;
-  pendingSenderCandidates: RTCIceCandidateInit[];
+  offer?: SdpInit;
+  answer?: SdpInit;
+  pendingSenderCandidates: IceCandidateInit[];
   source: 'cast' | 'custom';
   lastActivity: number;
 }
@@ -18,10 +24,10 @@ interface SignalingOptions {
 
 export interface SignalingRelay {
   handleOffer(sessionId: string, sdp: string, source: 'cast' | 'custom'): void;
-  handleSenderCandidate(sessionId: string, candidate: RTCIceCandidateInit): void;
-  handleDisplayCandidate(sessionId: string, candidate: RTCIceCandidateInit): void;
+  handleSenderCandidate(sessionId: string, candidate: IceCandidateInit): void;
+  handleDisplayCandidate(sessionId: string, candidate: IceCandidateInit): void;
   onAnswerReady(callback: (sessionId: string, sdp: string) => void): void;
-  onDisplayCandidate(callback: (sessionId: string, candidate: RTCIceCandidateInit) => void): void;
+  onDisplayCandidate(callback: (sessionId: string, candidate: IceCandidateInit) => void): void;
   closeSession(sessionId: string): void;
 }
 
@@ -29,7 +35,7 @@ export function createSignalingRelay(options: SignalingOptions): SignalingRelay 
   const { wsServer } = options;
   const sessions = new Map<string, SignalingSession>();
   const answerCallbacks: Array<(sessionId: string, sdp: string) => void> = [];
-  const displayCandidateCallbacks: Array<(sessionId: string, candidate: RTCIceCandidateInit) => void> = [];
+  const displayCandidateCallbacks: Array<(sessionId: string, candidate: IceCandidateInit) => void> = [];
 
   // Reap inactive sessions every 15s
   const reapInterval = setInterval(() => {
@@ -95,7 +101,7 @@ export function createSignalingRelay(options: SignalingOptions): SignalingRelay 
 
     if (msg.type === 'ice-candidate' && msg.sessionId && msg.candidate) {
       const sessionId: string = msg.sessionId;
-      const candidate: RTCIceCandidateInit = msg.candidate;
+      const candidate: IceCandidateInit = msg.candidate;
       const session = sessions.get(sessionId);
 
       if (DEBUG) console.log(`[signaling] received display ICE candidate for session ${sessionId}`);
@@ -121,7 +127,7 @@ export function createSignalingRelay(options: SignalingOptions): SignalingRelay 
       wsServer.sendCommand({ type: 'webrtc-offer', sessionId, sdp });
     },
 
-    handleSenderCandidate(sessionId: string, candidate: RTCIceCandidateInit): void {
+    handleSenderCandidate(sessionId: string, candidate: IceCandidateInit): void {
       const session = sessions.get(sessionId);
       if (!session) {
         if (DEBUG) console.log(`[signaling] handleSenderCandidate: no session ${sessionId}`);
@@ -141,7 +147,7 @@ export function createSignalingRelay(options: SignalingOptions): SignalingRelay 
       }
     },
 
-    handleDisplayCandidate(sessionId: string, candidate: RTCIceCandidateInit): void {
+    handleDisplayCandidate(sessionId: string, candidate: IceCandidateInit): void {
       const session = sessions.get(sessionId);
       if (session) {
         touch(session);
@@ -158,7 +164,7 @@ export function createSignalingRelay(options: SignalingOptions): SignalingRelay 
       answerCallbacks.push(callback);
     },
 
-    onDisplayCandidate(callback: (sessionId: string, candidate: RTCIceCandidateInit) => void): void {
+    onDisplayCandidate(callback: (sessionId: string, candidate: IceCandidateInit) => void): void {
       displayCandidateCallbacks.push(callback);
     },
 

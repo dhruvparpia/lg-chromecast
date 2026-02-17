@@ -1,7 +1,9 @@
 import { Bonjour } from 'bonjour-service';
-import { randomBytes } from 'node:crypto';
+import { createHash } from 'node:crypto';
+import { hostname } from 'node:os';
 
-const DEVICE_ID = randomBytes(16).toString('hex');
+// Deterministic device ID derived from hostname so Cast clients reconnect across restarts
+const DEVICE_ID = createHash('sha256').update(`cast-bridge:${hostname()}`).digest('hex').slice(0, 32);
 
 export function startMdns(port: number, friendlyName = 'Cast Bridge'): () => void {
   const bonjour = new Bonjour();

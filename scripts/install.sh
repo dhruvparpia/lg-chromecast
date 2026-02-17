@@ -83,7 +83,7 @@ prompt_device_name() {
 write_env() {
     info "Writing /etc/cast-bridge.env (requires sudo)"
     sudo tee /etc/cast-bridge.env >/dev/null <<EOF
-DEVICE_NAME=${device_name}
+DEVICE_NAME="${device_name}"
 # DEBUG=1
 EOF
     info "Environment written to /etc/cast-bridge.env"

@@ -1,25 +1,52 @@
 import { WebSocketServer, WebSocket } from 'ws';
-import type { PlayerStatus } from './types.js';
+import type { PlayerStatus, DisplayCommand, SenderMessage } from './types.js';
 
 const DEBUG = process.env.DEBUG === '1' || process.env.DEBUG === 'true';
+const MAX_PAYLOAD = 64 * 1024; // 64 KB
+const PING_INTERVAL_MS = 30_000;
 
 export interface WsServer {
-  sendCommand(cmd: object): void;
+  sendCommand(cmd: DisplayCommand): void;
   onStatusUpdate(callback: (status: PlayerStatus) => void): void;
-  onSenderMessage(callback: (msg: any) => void): void;
+  onSenderMessage(callback: (msg: SenderMessage) => void): void;
   cleanup(): void;
 }
 
 export function startWsServer(port = 8010): WsServer {
-  const wss = new WebSocketServer({ port });
+  const wss = new WebSocketServer({ port, maxPayload: MAX_PAYLOAD });
   let tvClient: WebSocket | null = null;
   const senderClients = new Map<string, WebSocket>();
   const statusCallbacks: Array<(status: PlayerStatus) => void> = [];
-  const senderMessageCallbacks: Array<(msg: any) => void> = [];
+  const senderMessageCallbacks: Array<(msg: SenderMessage) => void> = [];
+
+  // Ping/pong heartbeat to detect zombie connections
+  const aliveSet = new WeakSet<WebSocket>();
+
+  const pingInterval = setInterval(() => {
+    wss.clients.forEach((ws) => {
+      if (!aliveSet.has(ws)) {
+        if (DEBUG) console.log('[ws] terminating unresponsive client');
+        ws.terminate();
+        return;
+      }
+      aliveSet.delete(ws);
+      ws.ping();
+    });
+  }, PING_INTERVAL_MS);
+  pingInterval.unref();
+
+  wss.on('close', () => {
+    clearInterval(pingInterval);
+  });
 
   wss.on('connection', (ws, req) => {
     const addr = req.socket.remoteAddress ?? 'unknown';
     if (DEBUG) console.log(`[ws] client connected from ${addr}`);
+
+    aliveSet.add(ws);
+    ws.on('pong', () => {
+      aliveSet.add(ws);
+    });
 
     // Initially treat as TV client; sender-hello will re-classify
     let role: 'tv' | 'sender' = 'tv';
@@ -81,7 +108,7 @@ export function startWsServer(port = 8010): WsServer {
   console.log(`[ws] server listening on port ${port}`);
 
   return {
-    sendCommand(cmd: object) {
+    sendCommand(cmd: DisplayCommand) {
       if (!tvClient || tvClient.readyState !== WebSocket.OPEN) {
         if (DEBUG) console.warn('[ws] no TV client connected, dropping command');
         return;
@@ -93,11 +120,12 @@ export function startWsServer(port = 8010): WsServer {
       statusCallbacks.push(callback);
     },
 
-    onSenderMessage(callback: (msg: any) => void) {
+    onSenderMessage(callback: (msg: SenderMessage) => void) {
       senderMessageCallbacks.push(callback);
     },
 
     cleanup() {
+      clearInterval(pingInterval);
       wss.close();
       if (DEBUG) console.log('[ws] server closed');
     },

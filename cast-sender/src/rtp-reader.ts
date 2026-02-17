@@ -2,6 +2,7 @@ import { createSocket, type Socket } from "node:dgram";
 
 export interface RtpReader {
   onPacket: (cb: (buf: Buffer) => void) => void;
+  offPacket: (cb: (buf: Buffer) => void) => void;
   stop: () => void;
 }
 
@@ -41,8 +42,13 @@ export function createRtpReader(port: number): RtpReader {
     onPacket(cb: (buf: Buffer) => void) {
       listeners.push(cb);
     },
+    offPacket(cb: (buf: Buffer) => void) {
+      const idx = listeners.indexOf(cb);
+      if (idx !== -1) listeners.splice(idx, 1);
+    },
     stop() {
       stopped = true;
+      listeners.length = 0;
       try {
         socket.close();
       } catch {

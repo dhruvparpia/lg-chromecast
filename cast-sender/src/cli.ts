@@ -43,6 +43,7 @@ function parseArgs(argv: string[]): CliOptions {
     switch (arg) {
       case "--bridge":
         if (!next) throw new Error("--bridge requires a value");
+        try { new URL(next); } catch { throw new Error("--bridge must be a valid URL (e.g. ws://host:8010)"); }
         opts.bridge = next;
         i++;
         break;

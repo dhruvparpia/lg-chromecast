@@ -4,6 +4,7 @@ import { startCastV2Server } from './castv2-server.js';
 import { startWsServer } from './ws-server.js';
 import { createMediaRelay } from './media-relay.js';
 import { createSignalingRelay } from './webrtc-signaling.js';
+import type { IceCandidateInit } from './types.js';
 
 const DEVICE_NAME = process.env.DEVICE_NAME ?? 'Cast Bridge';
 const CASTV2_PORT = 8009;
@@ -50,6 +51,13 @@ async function main(): Promise<void> {
     }
   });
 
+  // Helper to clean up callback maps for a session
+  function cleanupSession(sessionId: string): void {
+    signaling.closeSession(sessionId);
+    castAnswerCallbacks.delete(sessionId);
+    castCandidateCallbacks.delete(sessionId);
+  }
+
   // 4. CastV2 TLS server (Chrome and Cast senders connect here)
   const castv2 = await startCastV2Server({
     onMediaCommand,
@@ -62,19 +70,20 @@ async function main(): Promise<void> {
       signaling.handleOffer(sessionId, sdp, 'cast');
     },
     onIceCandidate: (sessionId, candidate) => {
-      signaling.handleSenderCandidate(sessionId, candidate as RTCIceCandidateInit);
+      signaling.handleSenderCandidate(sessionId, candidate as IceCandidateInit);
     },
     onMirroringStop: (sessionId) => {
       wsServer.sendCommand({ type: 'mirror-stop', sessionId });
-      signaling.closeSession(sessionId);
-      castAnswerCallbacks.delete(sessionId);
-      castCandidateCallbacks.delete(sessionId);
+      cleanupSession(sessionId);
+    },
+    onSenderDisconnect: (sessionId) => {
+      cleanupSession(sessionId);
     },
   });
   console.log(`[cast-bridge] CastV2 server on port ${castv2.port}`);
 
   // 4b. Handle WebRTC signaling from custom WebSocket senders
-  wsServer.onSenderMessage((msg: any) => {
+  wsServer.onSenderMessage((msg) => {
     if (msg.type === 'webrtc-offer' && msg.sessionId && msg.sdp) {
       signaling.handleOffer(msg.sessionId, msg.sdp, 'custom');
     } else if (msg.type === 'ice-candidate' && msg.sessionId && msg.candidate) {

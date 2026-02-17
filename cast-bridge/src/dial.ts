@@ -113,6 +113,8 @@ export function startDial(port: number = DIAL_PORT, friendlyName = 'Cast Bridge'
   }
 
   const server: Server = createServer(handleRequest);
+  server.requestTimeout = 10_000;
+  server.headersTimeout = 5_000;
 
   server.listen(port, () => {
     console.log(`[dial] DIAL server listening on port ${port}`);

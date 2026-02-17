@@ -452,10 +452,13 @@ var BridgeConnection = (function () {
 
   function _scheduleReconnect() {
     clearTimeout(reconnectTimer);
-    console.log('[Bridge] Reconnecting in', reconnectDelay, 'ms');
+    // Add jitter (0-25% of delay) to avoid thundering herd on bridge restart
+    var jitter = Math.floor(Math.random() * reconnectDelay * 0.25);
+    var delay = reconnectDelay + jitter;
+    console.log('[Bridge] Reconnecting in', delay, 'ms');
     reconnectTimer = setTimeout(function () {
       connect();
-    }, reconnectDelay);
+    }, delay);
     // Exponential backoff
     reconnectDelay = Math.min(reconnectDelay * 2, Config.RECONNECT_MAX_MS);
   }
@@ -473,7 +476,9 @@ var BridgeConnection = (function () {
 
     switch (msg.type) {
       case 'load':
-        MediaPlayer.load(msg.url, msg.contentType);
+        if (typeof msg.url === 'string' && msg.url) {
+          MediaPlayer.load(msg.url, msg.contentType || '');
+        }
         break;
 
       case 'play':
@@ -485,7 +490,9 @@ var BridgeConnection = (function () {
         break;
 
       case 'seek':
-        MediaPlayer.seek(msg.currentTime);
+        if (typeof msg.currentTime === 'number' && isFinite(msg.currentTime)) {
+          MediaPlayer.seek(msg.currentTime);
+        }
         break;
 
       case 'stop':
@@ -493,15 +500,21 @@ var BridgeConnection = (function () {
         break;
 
       case 'volume':
-        MediaPlayer.setVolume(msg.level);
+        if (typeof msg.level === 'number' && isFinite(msg.level)) {
+          MediaPlayer.setVolume(msg.level);
+        }
         break;
 
       case 'webrtc-offer':
-        MirrorPlayer.handleOffer(msg.sessionId, msg.sdp);
+        if (typeof msg.sessionId === 'string' && typeof msg.sdp === 'string') {
+          MirrorPlayer.handleOffer(msg.sessionId, msg.sdp);
+        }
         break;
 
       case 'ice-candidate':
-        MirrorPlayer.handleIceCandidate(msg.sessionId, msg.candidate);
+        if (typeof msg.sessionId === 'string' && msg.candidate) {
+          MirrorPlayer.handleIceCandidate(msg.sessionId, msg.candidate);
+        }
         break;
 
       case 'mirror-stop':

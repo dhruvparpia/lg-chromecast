@@ -101,32 +101,35 @@ export async function startSender(
 
   // --- Handle incoming messages ---
   const messageHandler = async (data: WebSocket.RawData) => {
-    let msg: Record<string, unknown>;
     try {
-      msg = JSON.parse(data.toString());
-    } catch {
-      return;
-    }
+      let msg: Record<string, unknown>;
+      try {
+        msg = JSON.parse(data.toString());
+      } catch {
+        return;
+      }
 
-    switch (msg.type) {
-      case "webrtc-answer": {
-        console.log("[sender] Received WebRTC answer");
-        await pc.setRemoteDescription({
-          type: "answer",
-          sdp: msg.sdp as string,
-        });
-        break;
-      }
-      case "ice-candidate": {
-        if (msg.candidate) {
-          const candidate = msg.candidate as { candidate: string; sdpMid?: string; sdpMLineIndex?: number };
-          await pc.addIceCandidate(new RTCIceCandidate(candidate));
+      switch (msg.type) {
+        case "webrtc-answer": {
+          console.log("[sender] Received WebRTC answer");
+          await pc.setRemoteDescription({
+            type: "answer",
+            sdp: msg.sdp as string,
+          });
+          break;
         }
-        break;
+        case "ice-candidate": {
+          if (msg.candidate) {
+            const candidate = msg.candidate as { candidate: string; sdpMid?: string; sdpMLineIndex?: number };
+            await pc.addIceCandidate(new RTCIceCandidate(candidate));
+          }
+          break;
+        }
+        default:
+          break;
       }
-      default:
-        // Ignore other message types
-        break;
+    } catch (err) {
+      console.error("[sender] Error handling message:", err);
     }
   };
 

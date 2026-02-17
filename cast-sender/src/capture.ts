@@ -32,9 +32,10 @@ export function checkFfmpeg(): void {
 /** Check if NVENC H.265 encoder is available. */
 export function hasNvenc(): boolean {
   try {
-    const out = execSync("ffmpeg -encoders 2>/dev/null", {
-      stdio: "pipe",
-    }).toString();
+    const out = execFileSync("ffmpeg", ["-encoders"], {
+      stdio: ["pipe", "pipe", "pipe"],
+      encoding: "utf-8",
+    });
     return out.includes("hevc_nvenc");
   } catch {
     return false;
@@ -189,9 +190,10 @@ export async function startCapture(
       if (!proc.killed) {
         proc.kill("SIGTERM");
         // Force kill after 2 seconds if still alive
-        setTimeout(() => {
+        const killTimer = setTimeout(() => {
           if (!proc.killed) proc.kill("SIGKILL");
         }, 2000);
+        killTimer.unref();
       }
     },
   };

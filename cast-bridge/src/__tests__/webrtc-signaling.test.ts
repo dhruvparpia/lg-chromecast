@@ -1,17 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { createSignalingRelay, type SignalingRelay } from '../webrtc-signaling.js';
 import type { WsServer } from '../ws-server.js';
+import type { DisplayCommand, PlayerStatus } from '../types.js';
 
 function createMockWsServer() {
-  const statusCallbacks: Array<(msg: any) => void> = [];
-  const sentCommands: object[] = [];
+  const statusCallbacks: Array<(msg: PlayerStatus) => void> = [];
+  const sentCommands: DisplayCommand[] = [];
 
   const ws: WsServer = {
-    sendCommand(cmd: object) {
+    sendCommand(cmd: DisplayCommand) {
       sentCommands.push(cmd);
     },
-    onStatusUpdate(cb: (msg: any) => void) {
-      statusCallbacks.push(cb);
+    onStatusUpdate(cb: (msg: PlayerStatus) => void) {
+      statusCallbacks.push(cb as any);
     },
     onSenderMessage() {},
     cleanup() {},

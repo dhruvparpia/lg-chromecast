@@ -5,6 +5,13 @@ export interface PlayerStatus {
   volume: number;
 }
 
+export interface IceCandidateInit {
+  candidate: string;
+  sdpMid?: string | null;
+  sdpMLineIndex?: number | null;
+  usernameFragment?: string | null;
+}
+
 export type DisplayCommand =
   | { type: 'load'; url: string; contentType: string }
   | { type: 'play' }
@@ -13,7 +20,12 @@ export type DisplayCommand =
   | { type: 'stop' }
   | { type: 'volume'; level: number }
   | { type: 'webrtc-offer'; sessionId: string; sdp: string }
-  | { type: 'ice-candidate'; sessionId: string; candidate: RTCIceCandidateInit };
+  | { type: 'ice-candidate'; sessionId: string; candidate: IceCandidateInit }
+  | { type: 'mirror-stop'; sessionId: string };
+
+export type SenderMessage =
+  | { type: 'webrtc-offer'; sessionId: string; sdp: string }
+  | { type: 'ice-candidate'; sessionId: string; candidate: IceCandidateInit };
 
 export interface MediaCommand {
   type: 'load' | 'play' | 'pause' | 'seek' | 'stop' | 'volume';

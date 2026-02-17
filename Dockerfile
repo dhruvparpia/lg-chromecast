@@ -7,7 +7,7 @@ FROM node:22-slim
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY cast-bridge/ ./
-RUN npm install tsx
+RUN npm install tsx@4
 ENV DEVICE_NAME="Cast Bridge"
 EXPOSE 8008 8009 8010
 CMD ["npx", "tsx", "src/index.ts"]
