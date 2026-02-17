@@ -1,0 +1,9 @@
+node_modules
+dist
+*.tsbuildinfo
+.git
+cast-display
+docs
+scripts
+README.md
+.dockerignore

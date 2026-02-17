@@ -1,0 +1,17 @@
+[Unit]
+Description=Cast Bridge - Chromecast receiver service
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+EnvironmentFile=/etc/cast-bridge.env
+WorkingDirectory=/opt/cast-bridge
+ExecStart=/usr/bin/npx tsx src/index.ts
+Restart=on-failure
+RestartSec=5
+User=nobody
+Group=nogroup
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,7 @@
+services:
+  cast-bridge:
+    build: .
+    network_mode: host
+    environment:
+      - DEVICE_NAME=${DEVICE_NAME:-Cast Bridge}
+    restart: unless-stopped

@@ -1,6 +1,6 @@
 # Cast Bridge
 
-Make any TV appear as a Chromecast on your local network. Cast from YouTube, Chrome, or any Cast-enabled app -- the TV shows up as a cast target just like a real Chromecast.
+Make any TV appear as a Chromecast on your local network. Cast from YouTube, Chrome, or any Cast-enabled app.
 
 ## How it works
 
@@ -16,41 +16,64 @@ Phone/Laptop                 Ubuntu Box              Any TV/Display
 
 **cast-display** runs on the TV (or any device with a browser). It connects to the bridge, receives media URLs, and plays them full-screen.
 
-## Quick start
+## Install
 
-### 1. Start the bridge
+### Option 1: Install script (recommended)
+
+```sh
+git clone https://github.com/dhruvparpia/lg-chromecast.git
+cd lg-chromecast
+./scripts/install.sh
+```
+
+Sets up a systemd service that starts on boot.
+
+### Option 2: Docker
+
+```sh
+git clone https://github.com/dhruvparpia/lg-chromecast.git
+cd lg-chromecast
+DEVICE_NAME="Living Room TV" docker compose up -d
+```
+
+Note: requires `network_mode: host` for mDNS (already configured in `docker-compose.yml`).
+
+### Option 3: Manual
 
 ```sh
 cd cast-bridge
 npm install
-npm start
+DEVICE_NAME="My TV" npm start
 ```
 
-Set a custom device name (what shows up in the Cast list):
+## TV Setup (cast-display)
 
-```sh
-DEVICE_NAME="Living Room TV" npm start
-```
+### Option A: Browser
 
-### 2. Open the display on your TV
-
-Open this URL in your TV's browser (or sideload as a webOS app):
+Open in the TV's web browser. Works on any smart TV.
 
 ```
 http://<bridge-ip>:8010?bridge=<bridge-ip>
 ```
 
-For webOS TVs, sideload with `ares-install`:
+### Option B: webOS sideload
 
 ```sh
-cd cast-display
-ares-package .
-ares-install com.cast.display_1.0.0_all.ipk
+./scripts/package-webos.sh
 ```
 
-### 3. Cast
+Then install with the webOS CLI tools:
 
-Open any Cast-enabled app, tap the Cast button, and select your device.
+```sh
+ares-install cast-display/com.cast.display_1.0.0_all.ipk
+```
+
+## Configuration
+
+| Env var | Default | Description |
+|---------|---------|-------------|
+| `DEVICE_NAME` | `Cast Bridge` | Name shown in Cast device list |
+| `DEBUG` | (unset) | Set to `1` for verbose logging |
 
 ## Ports
 
@@ -62,6 +85,14 @@ Open any Cast-enabled app, tap the Cast button, and select your device.
 
 ## Limitations
 
-- DRM-protected streams (Netflix, Disney+, etc.) won't work -- they require licensed Chromecast hardware
-- Screen mirroring not yet implemented (media URL casting only)
-- Real Cast sender apps may need protocol tweaks discovered during testing
+- DRM streams won't work (Netflix, Disney+, etc.)
+- Screen mirroring not yet implemented
+- Some Cast apps may need protocol tweaks
+
+## Development
+
+```sh
+npm test        # 49 tests
+npm run bench   # performance benchmarks
+npm run dev     # watch mode
+```
