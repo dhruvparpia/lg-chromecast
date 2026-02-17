@@ -1,6 +1,8 @@
 import type { WsServer } from './ws-server.js';
 import type { MediaCommand, DisplayCommand, PlayerStatus } from './types.js';
 
+const DEBUG = process.env.DEBUG === '1' || process.env.DEBUG === 'true';
+
 export interface MediaRelayOptions {
   wsServer: WsServer;
   onStatusForCast: (status: PlayerStatus) => void;
@@ -34,7 +36,7 @@ function toDisplayCommand(cmd: MediaCommand): DisplayCommand | null {
     case 'volume':
       return { type: 'volume', level: cmd.volume ?? 1 };
     default:
-      console.warn('[relay] unknown command type:', (cmd as MediaCommand).type);
+      if (DEBUG) console.warn('[relay] unknown command type:', (cmd as MediaCommand).type);
       return null;
   }
 }

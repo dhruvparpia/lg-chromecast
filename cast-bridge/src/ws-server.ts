@@ -1,6 +1,8 @@
 import { WebSocketServer, WebSocket } from 'ws';
 import type { PlayerStatus } from './types.js';
 
+const DEBUG = process.env.DEBUG === '1' || process.env.DEBUG === 'true';
+
 export interface WsServer {
   sendCommand(cmd: object): void;
   onStatusUpdate(callback: (status: PlayerStatus) => void): void;
@@ -14,34 +16,36 @@ export function startWsServer(port = 8010): WsServer {
 
   wss.on('connection', (ws, req) => {
     const addr = req.socket.remoteAddress ?? 'unknown';
-    console.log(`[ws] TV client connected from ${addr}`);
+    if (DEBUG) console.log(`[ws] TV client connected from ${addr}`);
 
     if (tvClient && tvClient.readyState === WebSocket.OPEN) {
-      console.log('[ws] replacing previous TV client');
+      if (DEBUG) console.log('[ws] replacing previous TV client');
       tvClient.close();
     }
     tvClient = ws;
 
     ws.on('message', (data) => {
       try {
-        const status: PlayerStatus = JSON.parse(String(data));
+        // Use Buffer directly -- avoid toString() when data is already a Buffer
+        const str = Buffer.isBuffer(data) ? data.toString('utf8') : String(data);
+        const status: PlayerStatus = JSON.parse(str);
         for (const cb of statusCallbacks) {
           cb(status);
         }
       } catch (err) {
-        console.error('[ws] failed to parse TV message:', err);
+        if (DEBUG) console.error('[ws] failed to parse TV message:', err);
       }
     });
 
     ws.on('close', () => {
-      console.log(`[ws] TV client disconnected (${addr})`);
+      if (DEBUG) console.log(`[ws] TV client disconnected (${addr})`);
       if (tvClient === ws) {
         tvClient = null;
       }
     });
 
     ws.on('error', (err) => {
-      console.error('[ws] client error:', err.message);
+      if (DEBUG) console.error('[ws] client error:', err.message);
     });
   });
 
@@ -50,7 +54,7 @@ export function startWsServer(port = 8010): WsServer {
   return {
     sendCommand(cmd: object) {
       if (!tvClient || tvClient.readyState !== WebSocket.OPEN) {
-        console.warn('[ws] no TV client connected, dropping command');
+        if (DEBUG) console.warn('[ws] no TV client connected, dropping command');
         return;
       }
       tvClient.send(JSON.stringify(cmd));
@@ -62,7 +66,7 @@ export function startWsServer(port = 8010): WsServer {
 
     cleanup() {
       wss.close();
-      console.log('[ws] server closed');
+      if (DEBUG) console.log('[ws] server closed');
     },
   };
 }

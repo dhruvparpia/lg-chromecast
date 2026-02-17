@@ -5,6 +5,8 @@ import { dirname, join } from 'node:path';
 import protobuf from 'protobufjs';
 import type { MediaCommand } from './types.js';
 
+const DEBUG = process.env.DEBUG === '1' || process.env.DEBUG === 'true';
+
 interface StartOptions {
   onMediaCommand: (cmd: MediaCommand) => void;
   deviceName?: string;
@@ -14,7 +16,11 @@ interface StartOptions {
 // Self-signed certificate generation (in-memory, no files)
 // ---------------------------------------------------------------------------
 
+let cachedCert: { key: string; cert: string } | null = null;
+
 function generateSelfSignedCert(): { key: string; cert: string } {
+  if (cachedCert) return cachedCert;
+
   const { privateKey, publicKey } = generateKeyPairSync('rsa', {
     modulusLength: 2048,
   });
@@ -27,7 +33,8 @@ function generateSelfSignedCert(): { key: string; cert: string } {
   const keyPem = privateKey.export({ type: 'pkcs8', format: 'pem' }) as string;
   const certPem = derToPem(certDer, 'CERTIFICATE');
 
-  return { key: keyPem, cert: certPem };
+  cachedCert = { key: keyPem, cert: certPem };
+  return cachedCert;
 }
 
 // ---------------------------------------------------------------------------
@@ -133,10 +140,13 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const PROTO_PATH = join(__dirname, '..', 'proto', 'cast_channel.proto');
 
 let CastMessage: protobuf.Type;
+let protoLoaded = false;
 
 async function loadProto(): Promise<void> {
+  if (protoLoaded) return;
   const root = await protobuf.load(PROTO_PATH);
   CastMessage = root.lookupType('extensions.api.cast_channel.CastMessage');
+  protoLoaded = true;
 }
 
 // ---------------------------------------------------------------------------
@@ -226,9 +236,11 @@ function encodeMessage(msg: Record<string, unknown>): Buffer {
   const err = CastMessage.verify(msg);
   if (err) throw new Error(`CastMessage verify: ${err}`);
   const pbuf = CastMessage.encode(CastMessage.create(msg)).finish();
-  const lenBuf = Buffer.alloc(4);
-  lenBuf.writeUInt32BE(pbuf.length, 0);
-  return Buffer.concat([lenBuf, Buffer.from(pbuf)]);
+  // Single allocation: 4 bytes length prefix + protobuf payload
+  const frame = Buffer.allocUnsafe(4 + pbuf.length);
+  frame.writeUInt32BE(pbuf.length, 0);
+  frame.set(pbuf, 4);
+  return frame;
 }
 
 function sendJsonMessage(
@@ -250,6 +262,32 @@ function sendJsonMessage(
 }
 
 // ---------------------------------------------------------------------------
+// Pre-built static response helpers
+// ---------------------------------------------------------------------------
+
+function buildPongBuffer(sourceId: string, destinationId: string): Buffer {
+  return encodeMessage({
+    protocolVersion: 0,
+    sourceId,
+    destinationId,
+    namespace: NS_HEARTBEAT,
+    payloadType: 0,
+    payloadUtf8: '{"type":"PONG"}',
+  });
+}
+
+function buildConnectedBuffer(sourceId: string, destinationId: string, requestId: number): Buffer {
+  return encodeMessage({
+    protocolVersion: 0,
+    sourceId,
+    destinationId,
+    namespace: NS_CONNECTION,
+    payloadType: 0,
+    payloadUtf8: JSON.stringify({ type: 'CONNECTED', requestId }),
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Connection handler
 // ---------------------------------------------------------------------------
 
@@ -260,17 +298,35 @@ function handleConnection(
   const sessionId = randomUUID();
   const transportId = `transport-${sessionId.slice(0, 8)}`;
   const mediaState = makeDefaultMediaState();
+
+  // Smarter receive buffer: track offset instead of slicing on every message
   let recvBuf = Buffer.alloc(0);
+  let recvOffset = 0;
 
   socket.on('data', (chunk: Buffer) => {
-    recvBuf = Buffer.concat([recvBuf, chunk]);
+    // Append chunk to receive buffer
+    if (recvOffset > 0 && recvOffset === recvBuf.length) {
+      // Buffer fully consumed, reset
+      recvBuf = chunk;
+      recvOffset = 0;
+    } else if (recvOffset > 0) {
+      // Compact remaining data + new chunk
+      const remaining = recvBuf.length - recvOffset;
+      const newBuf = Buffer.allocUnsafe(remaining + chunk.length);
+      recvBuf.copy(newBuf, 0, recvOffset);
+      chunk.copy(newBuf, remaining);
+      recvBuf = newBuf;
+      recvOffset = 0;
+    } else {
+      recvBuf = Buffer.concat([recvBuf, chunk]);
+    }
 
-    while (recvBuf.length >= 4) {
-      const msgLen = recvBuf.readUInt32BE(0);
-      if (recvBuf.length < 4 + msgLen) break;
+    while (recvBuf.length - recvOffset >= 4) {
+      const msgLen = recvBuf.readUInt32BE(recvOffset);
+      if (recvBuf.length - recvOffset < 4 + msgLen) break;
 
-      const msgBytes = recvBuf.subarray(4, 4 + msgLen);
-      recvBuf = recvBuf.subarray(4 + msgLen);
+      const msgBytes = recvBuf.subarray(recvOffset + 4, recvOffset + 4 + msgLen);
+      recvOffset += 4 + msgLen;
 
       let decoded: Record<string, unknown>;
       try {
@@ -299,10 +355,7 @@ function handleConnection(
         case NS_CONNECTION: {
           const msgType = (payload.type as string) ?? '';
           if (msgType === 'CONNECT') {
-            sendJsonMessage(socket, dst, src, NS_CONNECTION, {
-              type: 'CONNECTED',
-              requestId,
-            });
+            socket.write(buildConnectedBuffer(dst, src, requestId));
           }
           // CLOSE: let the socket close naturally
           break;
@@ -311,9 +364,7 @@ function handleConnection(
         // -- Heartbeat --
         case NS_HEARTBEAT: {
           if (payload.type === 'PING') {
-            sendJsonMessage(socket, dst, src, NS_HEARTBEAT, {
-              type: 'PONG',
-            });
+            socket.write(buildPongBuffer(dst, src));
           }
           break;
         }
