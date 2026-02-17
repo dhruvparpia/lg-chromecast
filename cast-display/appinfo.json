@@ -1,0 +1,11 @@
+{
+  "id": "com.cast.display",
+  "version": "1.0.0",
+  "vendor": "Cast Bridge",
+  "type": "web",
+  "main": "index.html",
+  "title": "Cast Display",
+  "icon": "icon.png",
+  "largeIcon": "largeIcon.png",
+  "resolution": "1920x1080"
+}

@@ -1,0 +1,207 @@
+/* ============================================
+   Cast Display - webOS TV App Styles
+   Full-screen Cast receiver display surface
+   ============================================ */
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html, body {
+  width: 1920px;
+  height: 1080px;
+  overflow: hidden;
+  background: #0a0a0a;
+  color: #e0e0e0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- Screen Management ---- */
+
+.screen {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  display: none;
+  justify-content: center;
+  align-items: center;
+}
+
+.screen.active {
+  display: flex;
+}
+
+/* ---- Idle Screen ---- */
+
+#idle-screen {
+  background: radial-gradient(ellipse at center, #1a1a2e 0%, #0a0a0a 70%);
+}
+
+.idle-content {
+  text-align: center;
+  animation: idleFadeIn 1.5s ease-out;
+}
+
+.cast-icon {
+  color: #555;
+  margin-bottom: 24px;
+  animation: idlePulse 4s ease-in-out infinite;
+}
+
+.idle-title {
+  font-size: 48px;
+  font-weight: 300;
+  color: #ccc;
+  letter-spacing: 2px;
+  margin-bottom: 12px;
+}
+
+.device-name {
+  font-size: 22px;
+  font-weight: 400;
+  color: #666;
+  letter-spacing: 1px;
+}
+
+@keyframes idlePulse {
+  0%, 100% { opacity: 0.5; transform: scale(1); }
+  50% { opacity: 1; transform: scale(1.05); }
+}
+
+@keyframes idleFadeIn {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ---- Loading Screen ---- */
+
+#loading-screen {
+  background: #0a0a0a;
+}
+
+.loading-content {
+  text-align: center;
+}
+
+.spinner {
+  width: 64px;
+  height: 64px;
+  border: 3px solid #333;
+  border-top-color: #888;
+  border-radius: 50%;
+  margin: 0 auto 20px;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.loading-text {
+  font-size: 20px;
+  color: #888;
+}
+
+/* ---- Player Screen ---- */
+
+#player-screen {
+  background: #000;
+}
+
+#video-player {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  background: #000;
+}
+
+/* Hide default video controls */
+#video-player::-webkit-media-controls {
+  display: none !important;
+}
+
+/* ---- Error Screen ---- */
+
+#error-screen {
+  background: #0a0a0a;
+}
+
+.error-content {
+  text-align: center;
+  animation: idleFadeIn 0.5s ease-out;
+}
+
+.error-icon {
+  width: 64px;
+  height: 64px;
+  line-height: 64px;
+  font-size: 36px;
+  font-weight: bold;
+  color: #c0392b;
+  border: 3px solid #c0392b;
+  border-radius: 50%;
+  margin: 0 auto 20px;
+}
+
+.error-title {
+  font-size: 32px;
+  font-weight: 400;
+  color: #ccc;
+  margin-bottom: 12px;
+}
+
+.error-message {
+  font-size: 18px;
+  color: #999;
+  max-width: 600px;
+  margin-bottom: 16px;
+}
+
+.error-hint {
+  font-size: 16px;
+  color: #555;
+}
+
+/* ---- Connection Status Overlay ---- */
+
+.connection-status {
+  position: absolute;
+  top: 20px;
+  right: 24px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  background: rgba(0, 0, 0, 0.7);
+  border: 1px solid #333;
+  border-radius: 6px;
+  font-size: 14px;
+  color: #aaa;
+  z-index: 100;
+  transition: opacity 0.5s ease;
+}
+
+.connection-status.hidden {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.connection-status.visible {
+  opacity: 1;
+}
+
+.status-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #e74c3c;
+}
+
+.connection-status.connected .status-dot {
+  background: #2ecc71;
+}

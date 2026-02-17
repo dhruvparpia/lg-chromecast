@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=1920, height=1080, initial-scale=1.0">
+  <title>Cast Display</title>
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <!-- Idle Screen -->
+  <div id="idle-screen" class="screen active">
+    <div class="idle-content">
+      <div class="cast-icon">
+        <svg width="80" height="80" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">
+          <path d="M2 16.1A5 5 0 0 1 5.9 20M2 12.05A9 9 0 0 1 9.95 20M2 8V6a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v12a2 2 0 0 1-2 2h-6"/>
+          <line x1="2" y1="20" x2="2.01" y2="20"/>
+        </svg>
+      </div>
+      <h1 class="idle-title">Ready to Cast</h1>
+      <p class="device-name" id="device-name">Cast Display</p>
+    </div>
+  </div>
+
+  <!-- Loading Screen -->
+  <div id="loading-screen" class="screen">
+    <div class="loading-content">
+      <div class="spinner"></div>
+      <p class="loading-text">Loading...</p>
+    </div>
+  </div>
+
+  <!-- Player Screen -->
+  <div id="player-screen" class="screen">
+    <video id="video-player" playsinline></video>
+  </div>
+
+  <!-- Error Screen -->
+  <div id="error-screen" class="screen">
+    <div class="error-content">
+      <div class="error-icon">!</div>
+      <h2 class="error-title">Playback Error</h2>
+      <p class="error-message" id="error-message">An error occurred</p>
+      <p class="error-hint">Waiting for new content...</p>
+    </div>
+  </div>
+
+  <!-- Connection Status Overlay -->
+  <div id="connection-status" class="connection-status hidden">
+    <span class="status-dot"></span>
+    <span class="status-text" id="status-text">Connecting...</span>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
