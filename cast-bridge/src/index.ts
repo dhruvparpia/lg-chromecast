@@ -4,12 +4,13 @@ import { startCastV2Server } from './castv2-server.js';
 import { startWsServer } from './ws-server.js';
 import { createMediaRelay } from './media-relay.js';
 
+const DEVICE_NAME = process.env.DEVICE_NAME ?? 'Cast Bridge';
 const CASTV2_PORT = 8009;
 const WS_PORT = 8010;
 const DIAL_PORT = 8008;
 
 async function main(): Promise<void> {
-  console.log('[cast-bridge] starting...');
+  console.log(`[cast-bridge] starting as "${DEVICE_NAME}"...`);
 
   // 1. WebSocket server (TV display connects here)
   const wsServer = startWsServer(WS_PORT);
@@ -27,10 +28,10 @@ async function main(): Promise<void> {
   console.log(`[cast-bridge] CastV2 server on port ${castv2.port}`);
 
   // 4. mDNS advertisement
-  const stopMdns = startMdns(CASTV2_PORT);
+  const stopMdns = startMdns(CASTV2_PORT, DEVICE_NAME);
 
   // 5. DIAL server
-  const stopDial = startDial(DIAL_PORT);
+  const stopDial = startDial(DIAL_PORT, DEVICE_NAME);
 
   console.log('[cast-bridge] all services running');
   console.log(`  mDNS: advertising _googlecast._tcp on port ${CASTV2_PORT}`);

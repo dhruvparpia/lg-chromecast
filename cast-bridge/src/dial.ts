@@ -2,7 +2,7 @@ import { createServer, type Server, type IncomingMessage, type ServerResponse } 
 import { randomUUID } from 'node:crypto';
 import { hostname } from 'node:os';
 
-const FRIENDLY_NAME = 'LG CX55';
+let FRIENDLY_NAME = 'Cast Bridge';
 const MODEL_NAME = 'Chromecast Ultra';
 const MANUFACTURER = 'Google Inc.';
 const DEVICE_UUID = randomUUID();
@@ -108,7 +108,8 @@ function handleRequest(req: IncomingMessage, res: ServerResponse): void {
   res.end('Not Found');
 }
 
-export function startDial(port: number = DIAL_PORT): () => void {
+export function startDial(port: number = DIAL_PORT, friendlyName = 'Cast Bridge'): () => void {
+  FRIENDLY_NAME = friendlyName;
   const server: Server = createServer(handleRequest);
 
   server.listen(port, () => {

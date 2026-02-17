@@ -7,6 +7,7 @@ import type { MediaCommand } from './types.js';
 
 interface StartOptions {
   onMediaCommand: (cmd: MediaCommand) => void;
+  deviceName?: string;
 }
 
 // ---------------------------------------------------------------------------
@@ -164,7 +165,7 @@ function makeReceiverStatus(sessionId: string, transportId: string) {
           { name: 'urn:x-cast:com.google.cast.debugoverlay' },
         ],
         sessionId,
-        statusText: 'Ready To Cast',
+        statusText: '',
         transportId,
         isIdleScreen: false,
       },
